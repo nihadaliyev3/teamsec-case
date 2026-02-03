@@ -1,0 +1,86 @@
+services:
+  # 1. Operational DB
+  db_ops:
+    image: postgres:15-alpine
+    container_name: teamsec_ops
+    # Docker automatically pulls variables from .env if they match standard Postgres names
+    # Or we can map them explicitly:
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. Data Warehouse (ClickHouse) - Large Data, Partitions
+  db_dwh:
+    image: clickhouse/clickhouse-server:23-alpine
+    container_name: teamsec_dwh
+    ports:
+      - "8123:8123" # HTTP Port
+      - "9000:9000" # Native Client Port
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse_logs:/var/log/clickhouse-server
+
+  # 3. Task Queue Broker
+  redis:
+    image: redis:alpine
+    container_name: teamsec_redis
+    ports:
+      - "6379:6379"
+
+  # 4. The Adapter
+  adapter:
+    build: .
+    container_name: teamsec_adapter
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./adapter:/app/adapter
+      - ./requirements.txt:/app/requirements.txt
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db_ops
+      - db_dwh
+      - redis
+    working_dir: /app/adapter
+    env_file:
+      - .env
+
+  # 5. Celery Worker
+  celery_worker:
+    build: .
+    container_name: teamsec_worker
+    command: celery -A core worker -l info
+    volumes:
+      - ./adapter:/app/adapter
+    depends_on:
+      - redis
+      - adapter
+    working_dir: /app/adapter
+    env_file:
+      - .env
+
+  # 6. Simulator
+  simulator:
+    build: .
+    container_name: teamsec_simulator
+    command: python manage.py runserver 0.0.0.0:8000
+    working_dir: /app/external_bank
+    volumes:
+      - ./external_bank:/app/external_bank
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+
+volumes:
+  postgres_data:
+  clickhouse_data:

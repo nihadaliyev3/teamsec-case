@@ -1,0 +1,21 @@
+# Django Core
+Django>=5.2,<5.3
+djangorestframework
+django-cors-headers
+
+# Task Queue
+celery
+redis
+
+# Data Processing
+pandas
+numpy
+
+# Databases
+psycopg2-binary  # Postgres Adapter
+clickhouse-connect  # ClickHouse Client
+
+# Utilities
+python-dotenv
+requests
+gunicorn
