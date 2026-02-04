@@ -4,13 +4,18 @@ Comprehensive test suite for the data_api app (Bank Simulator).
 Tests cover:
 - CSV upload with Strict Overwrite policy (no Django filename suffixes).
 - Data mutation (update) endpoint.
-- Multi-tenant download logic (BANK001/BANK002/BANK003 transformations).
+- Multi-tenant download logic with streaming (BANK001/BANK002/BANK003 transformations).
+- Streaming response handling for large files (200MB+).
+- gzip compression support (using zlib.compressobj for streaming).
 - Edge cases: validation, missing file_type.
 """
 
+import gzip
+import json
 import os
 import shutil
 import tempfile
+import zlib
 
 from django.test import override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -52,6 +57,35 @@ class DataAPITestCase(APITestCase):
         if os.path.exists(TEMP_MEDIA_ROOT):
             shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
         super().tearDown()
+    
+    def _decode_streaming_response(self, response):
+        """
+        Helper to decode StreamingHttpResponse content.
+        
+        Handles:
+        - Collecting streamed chunks
+        - gzip decompression if Content-Encoding: gzip
+          (works with both gzip.compress and zlib.compressobj with gzip format)
+        - JSON parsing
+        
+        Args:
+            response: Django response object (may be StreamingHttpResponse)
+            
+        Returns:
+            Parsed JSON data (list or dict)
+        """
+        # Collect all chunks from streaming response
+        content = b''.join(response.streaming_content) if hasattr(response, 'streaming_content') else response.content
+        
+        # Decompress if gzip-encoded
+        # Note: gzip.decompress() works with data compressed by zlib.compressobj(wbits=16+15)
+        # Alternatively, could use: zlib.decompressobj(wbits=16+zlib.MAX_WBITS).decompress()
+        if response.get('Content-Encoding') == 'gzip':
+            content = gzip.decompress(content)
+        
+        # Decode bytes to string and parse JSON
+        content_str = content.decode('utf-8')
+        return json.loads(content_str)
 
     # -------------------------------------------------------------------------
     # 1. Basic Upload (Happy Path)
@@ -218,6 +252,8 @@ class DataAPITestCase(APITestCase):
         """
         Scenario A (Bank1/Default): Request with tenant=BANK001 returns master
         data unchanged; Loan ID remains as in the file (e.g. 1000).
+        
+        Tests streaming response handling.
         """
         self.client.post(
             "/api/upload/",
@@ -235,8 +271,11 @@ class DataAPITestCase(APITestCase):
             "/api/data/",
             {"file_type": "commercial_credit", "tenant": "BANK001"},
         )
-        self.assertEqual(response.status_code, 200, msg=response.content)
-        data = response.json()
+        self.assertEqual(response.status_code, 200, msg=f"Got status {response.status_code}")
+        
+        # Decode streaming response
+        data = self._decode_streaming_response(response)
+        
         self.assertEqual(len(data), 1)
         self.assertEqual(str(data[0]["loan_account_number"]), "1000")
         self.assertEqual(data[0]["outstanding_principal_balance"], 100)
@@ -245,6 +284,8 @@ class DataAPITestCase(APITestCase):
         """
         Scenario B (Bank2): tenant=BANK002 must prefix Loan ID with 'B2-'
         and multiply outstanding_principal_balance by 1.5.
+        
+        Tests multi-tenant transformation with streaming.
         """
         self.client.post(
             "/api/upload/",
@@ -262,8 +303,11 @@ class DataAPITestCase(APITestCase):
             "/api/data/",
             {"file_type": "commercial_credit", "tenant": "BANK002"},
         )
-        self.assertEqual(response.status_code, 200, msg=response.content)
-        data = response.json()
+        self.assertEqual(response.status_code, 200)
+        
+        # Decode streaming response
+        data = self._decode_streaming_response(response)
+        
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["loan_account_number"], "B2-1000")
         self.assertEqual(data[0]["outstanding_principal_balance"], 150.0)
@@ -271,6 +315,8 @@ class DataAPITestCase(APITestCase):
     def test_download_bank3_prefixes_loan_id(self):
         """
         Scenario C (Bank3): tenant=BANK003 must prefix Loan ID with 'B3-'.
+        
+        Tests multi-tenant transformation with streaming.
         """
         self.client.post(
             "/api/upload/",
@@ -288,8 +334,11 @@ class DataAPITestCase(APITestCase):
             "/api/data/",
             {"file_type": "commercial_credit", "tenant": "BANK003"},
         )
-        self.assertEqual(response.status_code, 200, msg=response.content)
-        data = response.json()
+        self.assertEqual(response.status_code, 200)
+        
+        # Decode streaming response
+        data = self._decode_streaming_response(response)
+        
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["loan_account_number"], "B3-1000")
 
@@ -340,3 +389,128 @@ class DataAPITestCase(APITestCase):
         )
         self.assertEqual(response.status_code, 404, msg=response.data)
         self.assertIn("error", response.data)
+    
+    # -------------------------------------------------------------------------
+    # 6. Streaming & Compression Tests (200MB Support)
+    # -------------------------------------------------------------------------
+    
+    def test_gzip_compression_when_accept_encoding_header_present(self):
+        """
+        When client sends 'Accept-Encoding: gzip', the response should
+        be gzip-compressed with Content-Encoding: gzip header.
+        
+        This reduces network transfer by ~70-80% for large JSON responses.
+        """
+        self.client.post(
+            "/api/upload/",
+            data={
+                "file": SimpleUploadedFile(
+                    "commercial_credit.csv",
+                    self.valid_csv,
+                    content_type="text/csv",
+                ),
+                "file_type": "commercial_credit",
+            },
+            format="multipart",
+        )
+        
+        # Request with Accept-Encoding: gzip
+        response = self.client.get(
+            "/api/data/",
+            {"file_type": "commercial_credit", "tenant": "BANK001"},
+            HTTP_ACCEPT_ENCODING="gzip",
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get('Content-Encoding'), 'gzip', 
+                        "Response should be gzip-compressed when client accepts it")
+        
+        # Verify we can decode the gzipped response
+        data = self._decode_streaming_response(response)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(str(data[0]["loan_account_number"]), "1000")
+    
+    def test_no_gzip_compression_when_not_requested(self):
+        """
+        When client doesn't send 'Accept-Encoding: gzip', response
+        should be sent uncompressed for compatibility.
+        """
+        self.client.post(
+            "/api/upload/",
+            data={
+                "file": SimpleUploadedFile(
+                    "commercial_credit.csv",
+                    self.valid_csv,
+                    content_type="text/csv",
+                ),
+                "file_type": "commercial_credit",
+            },
+            format="multipart",
+        )
+        
+        # Request without Accept-Encoding header
+        response = self.client.get(
+            "/api/data/",
+            {"file_type": "commercial_credit", "tenant": "BANK001"},
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertNotEqual(response.get('Content-Encoding'), 'gzip',
+                          "Response should NOT be gzipped when not requested")
+        
+        # Verify response is valid JSON
+        data = self._decode_streaming_response(response)
+        self.assertEqual(len(data), 1)
+    
+    def test_large_file_streaming_handles_multiple_chunks(self):
+        """
+        Test that large files are processed in chunks (not loaded entirely
+        into memory). This simulates a 200MB+ scenario.
+        
+        We create a CSV with enough rows to exceed the chunk_size (10000 rows)
+        and verify multi-tenant transformations work correctly across chunks.
+        """
+        # Generate CSV with 15000 rows (exceeds default chunk_size of 10000)
+        rows = ["loan_account_number;outstanding_principal_balance"]
+        for i in range(15000):
+            rows.append(f"LOAN_{i:06d};{1000 + i}")
+        
+        large_csv = "\n".join(rows).encode('utf-8')
+        
+        self.client.post(
+            "/api/upload/",
+            data={
+                "file": SimpleUploadedFile(
+                    "commercial_credit.csv",
+                    large_csv,
+                    content_type="text/csv",
+                ),
+                "file_type": "commercial_credit",
+            },
+            format="multipart",
+        )
+        
+        # Download with BANK002 transformations (should prefix all IDs with B2-)
+        response = self.client.get(
+            "/api/data/",
+            {"file_type": "commercial_credit", "tenant": "BANK002"},
+            HTTP_ACCEPT_ENCODING="gzip",  # Use gzip for faster transfer
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = self._decode_streaming_response(response)
+        
+        # Verify we got all 15000 records
+        self.assertEqual(len(data), 15000, "All records should be returned via streaming")
+        
+        # Verify transformations work on first chunk (row 0)
+        self.assertEqual(data[0]["loan_account_number"], "B2-LOAN_000000")
+        self.assertEqual(data[0]["outstanding_principal_balance"], 1000 * 1.5)
+        
+        # Verify transformations work on second chunk (row 10000+)
+        self.assertEqual(data[10000]["loan_account_number"], "B2-LOAN_010000")
+        self.assertEqual(data[10000]["outstanding_principal_balance"], 11000 * 1.5)
+        
+        # Verify transformations work on last row
+        self.assertEqual(data[14999]["loan_account_number"], "B2-LOAN_014999")
+        self.assertEqual(data[14999]["outstanding_principal_balance"], 15999 * 1.5)
