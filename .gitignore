@@ -1,9 +1,25 @@
+# --- Python & Django ---
 __pycache__/
-*.py[cod]
-.env
+*.pyc
 venv/
+.env
+db.sqlite3
+*.log
+
+# --- Project Specific ---
+# Ignore ClickHouse logs folder
+clickhouse_logs/
+
+# --- Media Files ---
+# Ignore all files in media...
+media/*
+external_bank/media/*
+
+# ...EXCEPT this empty file (so the folder structure exists)
+!media/.gitkeep
+!external_bank/media/.gitkeep
+
+# --- IDE Settings (Optional) ---
+.vscode/
+.idea/
 .DS_Store
-*.sqlite3
-postgres_data/
-clickhouse_data/
-redis_data/
