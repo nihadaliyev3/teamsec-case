@@ -9,7 +9,7 @@ db.sqlite3
 # --- Project Specific ---
 # Ignore ClickHouse logs folder
 clickhouse_logs/
-
+clickhouse_logs/clickhouse-server.log
 # --- Media Files ---
 # Ignore all files in media...
 media/*
