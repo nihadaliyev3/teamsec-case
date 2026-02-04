@@ -30,6 +30,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+
+    #Our Apps
+    'orchestrator',
 ]
 
 MIDDLEWARE = [
@@ -77,15 +81,17 @@ DATABASES = {
 
 # --- DATA WAREHOUSE (ClickHouse) ---
 # NOT in DATABASES dict. We access these via django.conf.settings.CLICKHOUSE_CONFIG
-CLICKHOUSE_HOST = os.environ.get('DWH_HOST', 'db_dwh')
-CLICKHOUSE_PORT = int(os.environ.get('DWH_PORT', 8123))
+CLICKHOUSE_HOST = os.environ.get('DWH_HOST')
+CLICKHOUSE_PORT = int(os.environ.get('DWH_PORT'))
 CLICKHOUSE_USER = 'default' # Default CH user
 CLICKHOUSE_PASSWORD = ''    # Default CH has no password usually
 
 # --- CELERY CONFIG ---
-CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://redis:6379/0')
+CELERY_BROKER_URL = os.environ.get('REDIS_URL')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
 
 
 # Password validation
