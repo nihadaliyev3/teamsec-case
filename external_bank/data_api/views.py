@@ -113,6 +113,35 @@ class DataDownloadView(APIView):
     - gzip compression (~70-80% size reduction)
     - Memory-efficient pandas chunk iteration
     """
+
+    def head(self, request):
+        """
+        Lightweight metadata check.
+        Used by Adapter to check for updates without downloading the file.
+        Returns Version and File Size in headers.
+        """
+        file_type = request.query_params.get('file_type')
+        
+        if not file_type:
+            return Response(status=400)
+
+        try:
+            # Efficient DB Lookup (No disk I/O)
+            bank_file = BankFile.objects.get(file_type=file_type)
+            
+            response = Response(status=200)
+            # Custom Header for Versioning
+            response['X-Data-Version'] = str(bank_file.version)
+            # Standard Header for Size (Good for ETL progress bars)
+            response['Content-Length'] = str(bank_file.file.size)
+            
+            return response
+
+        except BankFile.DoesNotExist:
+            return Response(status=404)
+        except Exception as e:
+            print(f"HEAD Error: {e}")
+            return Response(status=500)
     
     def _apply_tenant_transformation(self, chunk_df, tenant_id):
         """
