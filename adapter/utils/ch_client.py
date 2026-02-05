@@ -1,6 +1,13 @@
 import clickhouse_connect
 import logging
 from django.conf import settings
+from orchestrator.constants import (
+    CH_CUSTOMER_TYPE_ENUM,
+    CH_LOAN_STATUS_CODE_ENUM,
+    CH_LOAN_STATUS_FLAG_ENUM,
+    CH_INSURANCE_INCLUDED_ENUM,
+    CH_INSTALLMENT_STATUS_ENUM,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +41,19 @@ class ClickHouseClient:
     def init_tables(self):
         client = self.connect()
 
-        # 1. Unified Credits Table
-        credits_sql = """
+        # 1. Unified Credits Table with ENUM types for categorical fields
+        credits_sql = f"""
         CREATE TABLE IF NOT EXISTS credits_all (
             tenant_id String,
             loan_type String,
             loan_account_number String,
             customer_id String,
-            customer_type String,
+            customer_type {CH_CUSTOMER_TYPE_ENUM},
             
             -- Loan Details
             loan_product_type String,      
-            loan_status_code String,
-            loan_status_flag String,      
+            loan_status_code {CH_LOAN_STATUS_CODE_ENUM},
+            loan_status_flag {CH_LOAN_STATUS_FLAG_ENUM},      
             days_past_due Int32,
             final_maturity_date Date,
             
@@ -85,7 +92,7 @@ class ClickHouseClient:
             customer_province_code Nullable(String),
             customer_district_code Nullable(String), 
             customer_region_code Nullable(String), 
-            insurance_included Nullable(String),
+            insurance_included Nullable({CH_INSURANCE_INCLUDED_ENUM}),
 
             inserted_at DateTime DEFAULT now()
         ) 
@@ -94,8 +101,8 @@ class ClickHouseClient:
         ORDER BY (loan_account_number)
         """
 
-        # 2. Unified Payments Table
-        payments_sql = """
+        # 2. Unified Payments Table with ENUM type for status
+        payments_sql = f"""
         CREATE TABLE IF NOT EXISTS payments_all (
             tenant_id String,
             loan_type String,
@@ -108,7 +115,7 @@ class ClickHouseClient:
             interest_component Decimal(18, 4),
             kkdf_component Decimal(18, 4),
             bsmv_component Decimal(18, 4),
-            installment_status String,
+            installment_status {CH_INSTALLMENT_STATUS_ENUM},
             
             remaining_principal Decimal(18, 4),
             remaining_interest Decimal(18, 4),
