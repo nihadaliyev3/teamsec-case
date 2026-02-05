@@ -85,6 +85,7 @@ CLICKHOUSE_HOST = os.environ.get('DWH_HOST')
 CLICKHOUSE_PORT = int(os.environ.get('DWH_PORT'))
 CLICKHOUSE_USER = 'default' # Default CH user
 CLICKHOUSE_PASSWORD = ''    # Default CH has no password usually
+CLICKHOUSE_DB = os.environ.get('DWH_DB', 'default')
 
 # --- CELERY CONFIG ---
 CELERY_BROKER_URL = os.environ.get('REDIS_URL')
