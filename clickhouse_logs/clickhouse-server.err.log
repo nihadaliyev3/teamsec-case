@@ -7,3 +7,53 @@
 2026.02.03 12:40:18.484059 [ 1 ] {} <Warning> Application: Listen [::]:9000 failed: Poco::Exception. Code: 1000, e.code() = 0, DNS error: EAI: Address family for hostname not supported (version 23.8.16.16 (official build)). If it is an IPv6 or IPv4 address and your host has disabled IPv6 or IPv4, then consider to specify not disabled IPv4 or IPv6 address to listen in <listen_host> element of configuration file. Example for disabled IPv6: <listen_host>0.0.0.0</listen_host> . Example for disabled IPv4: <listen_host>::</listen_host>
 2026.02.03 12:40:18.500093 [ 1 ] {} <Warning> Application: Listen [::]:9004 failed: Poco::Exception. Code: 1000, e.code() = 0, DNS error: EAI: Address family for hostname not supported (version 23.8.16.16 (official build)). If it is an IPv6 or IPv4 address and your host has disabled IPv6 or IPv4, then consider to specify not disabled IPv4 or IPv6 address to listen in <listen_host> element of configuration file. Example for disabled IPv6: <listen_host>0.0.0.0</listen_host> . Example for disabled IPv4: <listen_host>::</listen_host>
 2026.02.03 12:40:18.525779 [ 1 ] {} <Warning> Application: Listen [::]:9005 failed: Poco::Exception. Code: 1000, e.code() = 0, DNS error: EAI: Address family for hostname not supported (version 23.8.16.16 (official build)). If it is an IPv6 or IPv4 address and your host has disabled IPv6 or IPv4, then consider to specify not disabled IPv4 or IPv6 address to listen in <listen_host> element of configuration file. Example for disabled IPv6: <listen_host>0.0.0.0</listen_host> . Example for disabled IPv4: <listen_host>::</listen_host>
+2026.02.05 13:31:15.366247 [ 47 ] {1d207383-0483-4789-8a9f-b2658dbfb1f8} <Error> executeQuery: Code: 44. DB::Exception: Sorting key contains nullable columns, but merge tree setting `allow_nullable_key` is disabled. (ILLEGAL_COLUMN) (version 23.8.16.16 (official build)) (from 172.18.0.5:55874) (in query:  CREATE TABLE IF NOT EXISTS payments_all ( tenant_id String, loan_type String, loan_account_number String, installment_number Nullable(Int32), actual_payment_date Nullable(Date), scheduled_payment_date Nullable(Date), installment_amount Nullable(Decimal(18, 4)), principal_component Nullable(Decimal(18, 4)), interest_component Nullable(Decimal(18, 4)), kkdf_component Nullable(Decimal(18, 4)), bsmv_component Nullable(Decimal(18, 4)), installment_status Nullable(Enum8('A' = 1, 'K' = 2)), remaining_principal Nullable(Decimal(18, 4)), remaining_interest Nullable(Decimal(18, 4)), remaining_kkdf Nullable(Decimal(18, 4)), remaining_bsmv Nullable(Decimal(18, 4)), inserted_at DateTime DEFAULT now() ) ENGINE = MergeTree() PARTITION BY (tenant_id, loan_type) ORDER BY (loan_account_number, installment_number) ), Stack trace (when copying this message, always include the lines below):
+
+0. DB::Exception::Exception(DB::Exception::MessageMasked&&, int, bool) @ 0x000000000bfc4824 in /usr/bin/clickhouse
+1. DB::Exception::Exception<String const&>(int, FormatStringHelperImpl<std::type_identity<String const&>::type>, String const&) @ 0x0000000007951590 in /usr/bin/clickhouse
+2. DB::checkKeyExpression(DB::ExpressionActions const&, DB::Block const&, String const&, bool) @ 0x0000000011d23da8 in /usr/bin/clickhouse
+3. DB::MergeTreeData::checkProperties(DB::StorageInMemoryMetadata const&, DB::StorageInMemoryMetadata const&, bool, bool, std::shared_ptr<DB::Context const>) const @ 0x0000000011d23254 in /usr/bin/clickhouse
+4. DB::MergeTreeData::MergeTreeData(DB::StorageID const&, DB::StorageInMemoryMetadata const&, std::shared_ptr<DB::Context>, String const&, DB::MergeTreeData::MergingParams const&, std::unique_ptr<DB::MergeTreeSettings, std::default_delete<DB::MergeTreeSettings>>, bool, bool, std::function<void (String const&)>) @ 0x0000000011d1f45c in /usr/bin/clickhouse
+5. DB::StorageMergeTree::StorageMergeTree(DB::StorageID const&, String const&, DB::StorageInMemoryMetadata const&, bool, std::shared_ptr<DB::Context>, String const&, DB::MergeTreeData::MergingParams const&, std::unique_ptr<DB::MergeTreeSettings, std::default_delete<DB::MergeTreeSettings>>, bool) @ 0x000000001200af54 in /usr/bin/clickhouse
+6. DB::create(DB::StorageFactory::Arguments const&) @ 0x0000000012008464 in /usr/bin/clickhouse
+7. DB::StorageFactory::get(DB::ASTCreateQuery const&, String const&, std::shared_ptr<DB::Context>, std::shared_ptr<DB::Context>, DB::ColumnsDescription const&, DB::ConstraintsDescription const&, bool) const @ 0x000000001181d01c in /usr/bin/clickhouse
+8. DB::InterpreterCreateQuery::doCreateTable(DB::ASTCreateQuery&, DB::InterpreterCreateQuery::TableProperties const&, std::unique_ptr<DB::DDLGuard, std::default_delete<DB::DDLGuard>>&) @ 0x0000000010f9d6c4 in /usr/bin/clickhouse
+9. DB::InterpreterCreateQuery::createTable(DB::ASTCreateQuery&) @ 0x0000000010f97518 in /usr/bin/clickhouse
+10. DB::InterpreterCreateQuery::execute() @ 0x0000000010fa2e40 in /usr/bin/clickhouse
+11. DB::executeQueryImpl(char const*, char const*, std::shared_ptr<DB::Context>, bool, DB::QueryProcessingStage::Enum, DB::ReadBuffer*) @ 0x00000000114c98d0 in /usr/bin/clickhouse
+12. DB::executeQuery(DB::ReadBuffer&, DB::WriteBuffer&, bool, std::shared_ptr<DB::Context>, std::function<void (DB::QueryResultDetails const&)>, std::optional<DB::FormatSettings> const&, std::function<void (DB::IOutputFormat&)>) @ 0x00000000114cc29c in /usr/bin/clickhouse
+13. DB::HTTPHandler::processQuery(DB::HTTPServerRequest&, DB::HTMLForm&, DB::HTTPServerResponse&, DB::HTTPHandler::Output&, std::optional<DB::CurrentThread::QueryScope>&) @ 0x000000001216e22c in /usr/bin/clickhouse
+14. DB::HTTPHandler::handleRequest(DB::HTTPServerRequest&, DB::HTTPServerResponse&) @ 0x0000000012171db0 in /usr/bin/clickhouse
+15. DB::HTTPServerConnection::run() @ 0x00000000121d456c in /usr/bin/clickhouse
+16. Poco::Net::TCPServerConnection::start() @ 0x00000000146da6e4 in /usr/bin/clickhouse
+17. Poco::Net::TCPServerDispatcher::run() @ 0x00000000146dbbe0 in /usr/bin/clickhouse
+18. Poco::PooledThread::run() @ 0x000000001484ed5c in /usr/bin/clickhouse
+19. Poco::ThreadImpl::runnableEntry(void*) @ 0x000000001484cf04 in /usr/bin/clickhouse
+20. start_thread @ 0x0000000000007624 in /lib/libpthread.so.0
+21. ? @ 0x00000000000d162c in /lib/libc.so.6
+
+2026.02.05 13:31:15.367194 [ 47 ] {1d207383-0483-4789-8a9f-b2658dbfb1f8} <Error> DynamicQueryHandler: Code: 44. DB::Exception: Sorting key contains nullable columns, but merge tree setting `allow_nullable_key` is disabled. (ILLEGAL_COLUMN), Stack trace (when copying this message, always include the lines below):
+
+0. DB::Exception::Exception(DB::Exception::MessageMasked&&, int, bool) @ 0x000000000bfc4824 in /usr/bin/clickhouse
+1. DB::Exception::Exception<String const&>(int, FormatStringHelperImpl<std::type_identity<String const&>::type>, String const&) @ 0x0000000007951590 in /usr/bin/clickhouse
+2. DB::checkKeyExpression(DB::ExpressionActions const&, DB::Block const&, String const&, bool) @ 0x0000000011d23da8 in /usr/bin/clickhouse
+3. DB::MergeTreeData::checkProperties(DB::StorageInMemoryMetadata const&, DB::StorageInMemoryMetadata const&, bool, bool, std::shared_ptr<DB::Context const>) const @ 0x0000000011d23254 in /usr/bin/clickhouse
+4. DB::MergeTreeData::MergeTreeData(DB::StorageID const&, DB::StorageInMemoryMetadata const&, std::shared_ptr<DB::Context>, String const&, DB::MergeTreeData::MergingParams const&, std::unique_ptr<DB::MergeTreeSettings, std::default_delete<DB::MergeTreeSettings>>, bool, bool, std::function<void (String const&)>) @ 0x0000000011d1f45c in /usr/bin/clickhouse
+5. DB::StorageMergeTree::StorageMergeTree(DB::StorageID const&, String const&, DB::StorageInMemoryMetadata const&, bool, std::shared_ptr<DB::Context>, String const&, DB::MergeTreeData::MergingParams const&, std::unique_ptr<DB::MergeTreeSettings, std::default_delete<DB::MergeTreeSettings>>, bool) @ 0x000000001200af54 in /usr/bin/clickhouse
+6. DB::create(DB::StorageFactory::Arguments const&) @ 0x0000000012008464 in /usr/bin/clickhouse
+7. DB::StorageFactory::get(DB::ASTCreateQuery const&, String const&, std::shared_ptr<DB::Context>, std::shared_ptr<DB::Context>, DB::ColumnsDescription const&, DB::ConstraintsDescription const&, bool) const @ 0x000000001181d01c in /usr/bin/clickhouse
+8. DB::InterpreterCreateQuery::doCreateTable(DB::ASTCreateQuery&, DB::InterpreterCreateQuery::TableProperties const&, std::unique_ptr<DB::DDLGuard, std::default_delete<DB::DDLGuard>>&) @ 0x0000000010f9d6c4 in /usr/bin/clickhouse
+9. DB::InterpreterCreateQuery::createTable(DB::ASTCreateQuery&) @ 0x0000000010f97518 in /usr/bin/clickhouse
+10. DB::InterpreterCreateQuery::execute() @ 0x0000000010fa2e40 in /usr/bin/clickhouse
+11. DB::executeQueryImpl(char const*, char const*, std::shared_ptr<DB::Context>, bool, DB::QueryProcessingStage::Enum, DB::ReadBuffer*) @ 0x00000000114c98d0 in /usr/bin/clickhouse
+12. DB::executeQuery(DB::ReadBuffer&, DB::WriteBuffer&, bool, std::shared_ptr<DB::Context>, std::function<void (DB::QueryResultDetails const&)>, std::optional<DB::FormatSettings> const&, std::function<void (DB::IOutputFormat&)>) @ 0x00000000114cc29c in /usr/bin/clickhouse
+13. DB::HTTPHandler::processQuery(DB::HTTPServerRequest&, DB::HTMLForm&, DB::HTTPServerResponse&, DB::HTTPHandler::Output&, std::optional<DB::CurrentThread::QueryScope>&) @ 0x000000001216e22c in /usr/bin/clickhouse
+14. DB::HTTPHandler::handleRequest(DB::HTTPServerRequest&, DB::HTTPServerResponse&) @ 0x0000000012171db0 in /usr/bin/clickhouse
+15. DB::HTTPServerConnection::run() @ 0x00000000121d456c in /usr/bin/clickhouse
+16. Poco::Net::TCPServerConnection::start() @ 0x00000000146da6e4 in /usr/bin/clickhouse
+17. Poco::Net::TCPServerDispatcher::run() @ 0x00000000146dbbe0 in /usr/bin/clickhouse
+18. Poco::PooledThread::run() @ 0x000000001484ed5c in /usr/bin/clickhouse
+19. Poco::ThreadImpl::runnableEntry(void*) @ 0x000000001484cf04 in /usr/bin/clickhouse
+20. start_thread @ 0x0000000000007624 in /lib/libpthread.so.0
+21. ? @ 0x00000000000d162c in /lib/libc.so.6
+ (version 23.8.16.16 (official build))
