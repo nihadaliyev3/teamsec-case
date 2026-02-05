@@ -1,5 +1,8 @@
 from django.db import models
 
+from .constants import SYNC_JOB_STATUS_CHOICES, SyncJobStatus
+
+
 class Tenant(models.Model):
     tenant_id = models.CharField(max_length=100, unique=True)
     name = models.CharField(max_length=100)
@@ -19,16 +22,12 @@ class Tenant(models.Model):
 
 
 class SyncJob(models.Model):
-    STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
-        ('IN_PROGRESS', 'In Progress'),
-        ('SUCCESS', 'Success'),
-        ('FAILED', 'Failed'),
-        ('WARNING', 'Warning'),
-    ]
-
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='jobs')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    status = models.CharField(
+        max_length=20,
+        choices=SYNC_JOB_STATUS_CHOICES,
+        default=SyncJobStatus.PENDING.value,
+    )
     
     # Observability
     started_at = models.DateTimeField(auto_now_add=True)

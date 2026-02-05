@@ -54,6 +54,32 @@ class LoanType(str, Enum):
         return self.value.startswith('retail_')
 
 # ============================================================================
+# SyncJob Status (orchestrator)
+# ============================================================================
+
+class SyncJobStatus(str, Enum):
+    """Sync job lifecycle status. Used by SyncJob model and tasks."""
+    PENDING = 'PENDING'
+    IN_PROGRESS = 'IN_PROGRESS'
+    SUCCESS = 'SUCCESS'
+    FAILED = 'FAILED'
+    WARNING = 'WARNING'
+
+    @property
+    def label(self):
+        return {
+            'PENDING': 'Pending',
+            'IN_PROGRESS': 'In Progress',
+            'SUCCESS': 'Success',
+            'FAILED': 'Failed',
+            'WARNING': 'Warning',
+        }[self.value]
+
+
+SYNC_JOB_STATUS_CHOICES = [(e.value, e.label) for e in SyncJobStatus]
+VALID_SYNC_JOB_STATUSES = {e.value for e in SyncJobStatus}
+
+# ============================================================================
 # Credits Table Categories (as Enums)
 # ============================================================================
 
