@@ -54,16 +54,27 @@ class DataNormalizer:
     @staticmethod
     def _repair_excel_rate(value_str: str) -> str:
         """
-        Repairs Excel auto-format where decimals like 5.14 are saved as 'May.14'.
-        Detects 3-letter month + optional dot + digits and replaces with "month.digits".
+        Repairs Excel auto-format where decimals like 5.14 are saved as 'May.14' or '5.Mar'.
+        Handles both patterns: month.digits (May.14) and digits.month (5.Mar).
         """
         lower_val = value_str.lower()
+        
+        # Pattern 1: month.digits (e.g., "may.14" -> "5.14")
         match = re.match(r"([a-zşçöğüı]{3})[\.]?(\d+)", lower_val)
         if match:
             month_str, remainder = match.groups()
             if month_str in DataNormalizer.MONTH_MAP:
                 month_num = DataNormalizer.MONTH_MAP[month_str]
                 return f"{month_num}.{remainder}"
+        
+        # Pattern 2: digits.month (e.g., "5.mar" -> "5.3")
+        match = re.match(r"(\d+)[\.]([a-zşçöğüı]{3})", lower_val)
+        if match:
+            digits, month_str = match.groups()
+            if month_str in DataNormalizer.MONTH_MAP:
+                month_num = DataNormalizer.MONTH_MAP[month_str]
+                return f"{digits}.{month_num}"
+        
         return value_str
 
     @staticmethod
@@ -75,6 +86,8 @@ class DataNormalizer:
         if not value:
             return None
         value_str = str(value).strip()
+        if not value_str:  # Whitespace-only after strip
+            return None
         for fmt in DataNormalizer.DATE_FORMATS:
             try:
                 dt = datetime.strptime(value_str, fmt)
@@ -103,8 +116,8 @@ class DataNormalizer:
         """
         Normalize interest/tax rates to decimal (e.g. 0.0514).
         - Strips %, commas; bps values are divided by 10000.
-        - Repairs Excel corruption (e.g. "May.14" -> 5.14 then -> 0.0514).
-        - If value > 1, treats as percentage and divides by 100.
+        - Repairs Excel corruption (e.g. "May.14" -> 5.14 or "5.Mar" -> 5.3 then -> 0.0514/0.053).
+        - If value >= 1, treats as percentage and divides by 100.
         """
         if value is None or value == "":
             return None
@@ -117,8 +130,8 @@ class DataNormalizer:
 
             val_str = DataNormalizer._repair_excel_rate(val_str)
             d = Decimal(val_str)
-            # Percentage heuristic: 18.5 or 5.14 -> store as 0.185 / 0.0514
-            if d > 1:
+            # Percentage heuristic: 18.5 or 5.14 or 1.0 -> store as 0.185 / 0.0514 / 0.01
+            if d >= 1:
                 d = d / 100
             return d.quantize(Decimal(f"1.{'0' * precision}"))
         except InvalidOperation:
