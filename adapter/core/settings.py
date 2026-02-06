@@ -34,6 +34,7 @@ INSTALLED_APPS = [
 
     #Our Apps
     'orchestrator',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [

@@ -7,6 +7,7 @@ django-cors-headers
 celery
 redis
 
+
 # Data Processing
 pandas
 numpy
@@ -21,3 +22,4 @@ requests
 gunicorn
 ijson>=3.2.0
 python-dateutil>=2.8.2
+django-celery-beat>=2.5.0
