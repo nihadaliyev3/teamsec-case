@@ -37,7 +37,7 @@ def get_remote_version(tenant, file_type):
     Performs a lightweight HEAD request to check file version.
     """
     try:
-        url = f"{tenant.simulator_url}/api/data"
+        url = f"{tenant.api_url}"
         headers = {'Authorization': f'Bearer {tenant.api_token}'}
         params = {'file_type': file_type, 'tenant': tenant.tenant_id}
         
@@ -56,7 +56,7 @@ def stream_to_staging(tenant, file_type, staging_table, table_type, loan_categor
     """
     Streams JSON from Simulator -> Normalizes -> Batch Inserts to ClickHouse Staging.
     """
-    url = f"{tenant.simulator_url}/api/data"
+    url = f"{tenant.api_url}"
     params = {'file_type': file_type, 'tenant': tenant.tenant_id}
     headers = {'Authorization': f'Bearer {tenant.api_token}'}
     
@@ -274,6 +274,71 @@ def _safe_float(val) -> float:
 # 2. PERIODIC TASK: CHECKER (CDC)
 # ============================================================================
 
+def trigger_sync_logic(tenant, category, force=False):
+    """
+    Core logic to check versions and launch a SyncJob.
+    Used by both the Periodic Scheduler and the Manual API.
+    
+    Args:
+        tenant: Tenant model instance
+        category: LoanCategory enum
+        force: If True, skips the 'Is New Version?' check and runs anyway.
+    
+    Returns:
+        job_id (int) if started, None if skipped.
+    """
+    prefix = category.value.lower()
+    credit_type = f"{prefix}_credit"
+    payment_type = f"{prefix}_payment"
+    
+    # 1. Fetch Remote Versions
+    v_credit = get_remote_version(tenant, credit_type)
+    v_payment = get_remote_version(tenant, payment_type)
+    
+    if v_credit is None or v_payment is None:
+        logger.warning(f"Skipping {tenant.tenant_id} {category}: API Unreachable")
+        return None
+
+    # 2. Check History (CDC)
+    last_job = SyncJob.objects.filter(
+        tenant=tenant,
+        loan_category=category.value,
+        status=SyncJobStatus.SUCCESS.value
+    ).order_by('-completed_at').first()
+
+    # 3. The Decision
+    has_update = (
+        not last_job or 
+        last_job.remote_version_credit != v_credit or 
+        last_job.remote_version_payment != v_payment
+    )
+
+    if has_update or force:
+        # Guard: Don't double-queue if already running
+        is_running = SyncJob.objects.filter(
+            tenant=tenant,
+            loan_category=category.value,
+            status__in=[SyncJobStatus.PENDING.value, SyncJobStatus.IN_PROGRESS.value]
+        ).exists()
+
+        if is_running:
+            logger.info(f"Skipping {tenant.tenant_id} {category}: Job already running")
+            return None
+
+        # 4. Launch
+        logger.info(f"Triggering Sync for {tenant.tenant_id} {category} (Force={force})")
+        job = SyncJob.objects.create(
+            tenant=tenant,
+            loan_category=category.value,
+            remote_version_credit=v_credit,
+            remote_version_payment=v_payment,
+            status=SyncJobStatus.PENDING.value
+        )
+        process_sync.delay(job.id)
+        return job.id
+    
+    return None
+
 @shared_task
 def check_for_updates():
     """
@@ -284,39 +349,7 @@ def check_for_updates():
     
     for tenant in tenants:
         for category in [LoanCategory.COMMERCIAL, LoanCategory.RETAIL]:
-            prefix = category.value.lower() # 'commercial' or 'retail'
-            credit_type = f"{prefix}_credit"
-            payment_type = f"{prefix}_payment"
-            
-            # Get Remote Versions
-            v_credit = get_remote_version(tenant, credit_type)
-            v_payment = get_remote_version(tenant, payment_type)
-            
-            if v_credit is None or v_payment is None:
-                continue # Skip if API down
-
-            # Check Last Successful Job
-            last_job = SyncJob.objects.filter(
-                tenant=tenant,
-                loan_category=category.value,
-                status=SyncJobStatus.SUCCESS.value
-            ).order_by('-completed_at').first()
-
-            # Trigger if Versions Differ (Or First Run)
-            if not last_job or \
-               last_job.remote_version_credit != v_credit or \
-               last_job.remote_version_payment != v_payment:
-                
-                logger.info(f"Update found for {tenant.tenant_id} {category}: C-v{v_credit} P-v{v_payment}")
-                
-                job = SyncJob.objects.create(
-                    tenant=tenant,
-                    loan_category=category.value,
-                    remote_version_credit=v_credit,
-                    remote_version_payment=v_payment,
-                    status=SyncJobStatus.PENDING.value
-                )
-                process_sync.delay(job.id)
+            trigger_sync_logic(tenant, category, force=False)
 
 # ============================================================================
 # 3. WORKER TASK: PROCESS SYNC (ETL)
