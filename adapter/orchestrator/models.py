@@ -1,6 +1,6 @@
 from django.db import models
 
-from .constants import SYNC_JOB_STATUS_CHOICES, SyncJobStatus
+from .constants import SYNC_JOB_STATUS_CHOICES, SyncJobStatus, LoanCategory
 
 
 class Tenant(models.Model):
@@ -28,6 +28,10 @@ class SyncJob(models.Model):
         choices=SYNC_JOB_STATUS_CHOICES,
         default=SyncJobStatus.PENDING.value,
     )
+
+    loan_category = models.CharField(max_length=20, choices=[(tag.value, tag.name) for tag in LoanCategory], default=LoanCategory.COMMERCIAL)
+    remote_version_credit = models.IntegerField(null=True, blank=True, help_text="Version of credit file processed")
+    remote_version_payment = models.IntegerField(null=True, blank=True, help_text="Version of payment file processed")
     
     # Observability
     started_at = models.DateTimeField(auto_now_add=True)
@@ -53,13 +57,13 @@ class SyncReport(models.Model):
     Separated from SyncJob to keep the main table light.
     """
     job = models.OneToOneField(SyncJob, on_delete=models.CASCADE, related_name='report')
-    
+    total_rows_processed = models.IntegerField(default=0)
     # Detailed logs (e.g. specific validation errors for rows)
     log_message = models.JSONField(default=dict, blank=True, help_text="Structured log of events/errors")
     
     # Performance metrics (e.g. "extract_time": 0.5s, "load_time": 2.0s)
     profiling_stats = models.JSONField(default=dict, blank=True, help_text="Performance breakdown, Data profiling metrics")
-
+    validation_errors = models.JSONField(default=list, help_text="List of validation failures (e.g. Missing Loan IDs)")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -217,6 +217,105 @@ CH_INSURANCE_INCLUDED_ENUM = "Enum8('E' = 1, 'H' = 2)"
 CH_INSTALLMENT_STATUS_ENUM = "Enum8('A' = 1, 'K' = 2)"
 
 # ============================================================================
+# Field Type and Schemas (Profiling)
+# ============================================================================
+
+class FieldType(str, Enum):
+    """Field type for profiling stats calculation."""
+    NUMERIC = 'numeric'      # Int32, Decimal -> min, max, avg, stddev
+    CATEGORICAL = 'categorical'  # Enum, String codes -> unique_count, most_frequent
+    DATE = 'date'            # Date -> min, max
+    STRING = 'string'        # Free-form strings -> unique_count
+    SKIP = 'skip'            # tenant_id, loan_type, inserted_at (metadata)
+
+
+# Schema definitions: field_name -> FieldType
+CREDITS_FIELD_SCHEMA = {
+    # Metadata (skip in profiling)
+    'tenant_id': FieldType.SKIP,
+    'loan_type': FieldType.SKIP,
+    'inserted_at': FieldType.SKIP,
+
+    # Identifiers (string profiling)
+    'loan_account_number': FieldType.STRING,
+    'customer_id': FieldType.STRING,
+
+    # Categorical
+    'customer_type': FieldType.CATEGORICAL,
+    'loan_product_type': FieldType.CATEGORICAL,
+    'loan_status_code': FieldType.CATEGORICAL,
+    'loan_status_flag': FieldType.CATEGORICAL,
+    'insurance_included': FieldType.CATEGORICAL,
+    'sector_code': FieldType.CATEGORICAL,
+    'customer_segment': FieldType.CATEGORICAL,
+    'risk_class': FieldType.CATEGORICAL,
+
+    # Numeric (integers)
+    'days_past_due': FieldType.NUMERIC,
+    'total_installment_count': FieldType.NUMERIC,
+    'outstanding_installment_count': FieldType.NUMERIC,
+    'paid_installment_count': FieldType.NUMERIC,
+    'installment_frequency': FieldType.NUMERIC,
+    'grace_period_months': FieldType.NUMERIC,
+
+    # Numeric (decimals - financials)
+    'original_loan_amount': FieldType.NUMERIC,
+    'outstanding_principal_balance': FieldType.NUMERIC,
+    'nominal_interest_rate': FieldType.NUMERIC,
+    'total_interest_amount': FieldType.NUMERIC,
+    'kkdf_rate': FieldType.NUMERIC,
+    'kkdf_amount': FieldType.NUMERIC,
+    'bsmv_rate': FieldType.NUMERIC,
+    'bsmv_amount': FieldType.NUMERIC,
+    'default_probability': FieldType.NUMERIC,
+
+    # Dates
+    'final_maturity_date': FieldType.DATE,
+    'first_payment_date': FieldType.DATE,
+    'loan_start_date': FieldType.DATE,
+    'loan_closing_date': FieldType.DATE,
+
+    # Ratings (treated as categorical)
+    'internal_rating': FieldType.CATEGORICAL,
+    'internal_credit_rating': FieldType.CATEGORICAL,
+    'external_rating': FieldType.CATEGORICAL,
+
+    # Location codes (categorical)
+    'customer_province_code': FieldType.CATEGORICAL,
+    'customer_district_code': FieldType.CATEGORICAL,
+    'customer_region_code': FieldType.CATEGORICAL,
+}
+
+PAYMENTS_FIELD_SCHEMA = {
+    # Metadata (skip)
+    'tenant_id': FieldType.SKIP,
+    'loan_type': FieldType.SKIP,
+    'inserted_at': FieldType.SKIP,
+
+    # Identifiers
+    'loan_account_number': FieldType.STRING,
+
+    # Numeric
+    'installment_number': FieldType.NUMERIC,
+    'installment_amount': FieldType.NUMERIC,
+    'principal_component': FieldType.NUMERIC,
+    'interest_component': FieldType.NUMERIC,
+    'kkdf_component': FieldType.NUMERIC,
+    'bsmv_component': FieldType.NUMERIC,
+    'remaining_principal': FieldType.NUMERIC,
+    'remaining_interest': FieldType.NUMERIC,
+    'remaining_kkdf': FieldType.NUMERIC,
+    'remaining_bsmv': FieldType.NUMERIC,
+
+    # Dates
+    'actual_payment_date': FieldType.DATE,
+    'scheduled_payment_date': FieldType.DATE,
+
+    # Categorical
+    'installment_status': FieldType.CATEGORICAL,
+}
+
+# ============================================================================
 # Helper Functions
 # ============================================================================
 
@@ -265,3 +364,33 @@ def get_field_label(field_name, value):
     
     label_map = label_maps.get(field_name, {})
     return label_map.get(value, value)
+
+CREDIT_COLUMNS = (
+    'loan_account_number', 'customer_id', 'tenant_id', 'loan_type',
+    'customer_type', 'loan_status_code', 'loan_status_flag', 'loan_product_type',
+    'final_maturity_date', 'first_payment_date', 'loan_start_date', 'loan_closing_date',
+    'original_loan_amount', 'outstanding_principal_balance', 'total_interest_amount',
+    'kkdf_amount', 'bsmv_amount', 'nominal_interest_rate', 'kkdf_rate', 'bsmv_rate',
+    'total_installment_count', 'outstanding_installment_count', 'paid_installment_count',
+    'installment_frequency', 'grace_period_months', 'days_past_due',
+    'internal_rating', 'internal_credit_rating', 'external_rating', 
+    'default_probability', 'risk_class', 'sector_code', 'customer_segment',
+    'customer_province_code', 'customer_district_code', 'customer_region_code',
+    'insurance_included'
+)
+
+PAYMENT_COLUMNS = (
+    'loan_account_number', 'tenant_id', 'loan_type', 'installment_number',
+    'actual_payment_date', 'scheduled_payment_date',
+    'installment_amount', 'principal_component', 'interest_component',
+    'kkdf_component', 'bsmv_component', 'installment_status',
+    'remaining_principal', 'remaining_interest', 'remaining_kkdf', 'remaining_bsmv'
+)
+
+class LoanCategory(str, Enum):
+    """
+    High-level category for the Sync Job.
+    Determines which pair of files to fetch.
+    """
+    COMMERCIAL = 'COMMERCIAL'
+    RETAIL = 'RETAIL'

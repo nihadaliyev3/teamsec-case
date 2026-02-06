@@ -11,6 +11,7 @@ from orchestrator.constants import (
 
 logger = logging.getLogger(__name__)
 
+
 class ClickHouseClient:
     _instance = None
 
