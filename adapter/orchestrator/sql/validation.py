@@ -5,7 +5,8 @@ ClickHouse SQL for ELT validation checks on staging tables.
 
 def ghost_loans_sql(stg_credits: str) -> str:
     """Rows with empty loan_account_number (critical - sync abort)."""
-    return f"SELECT count() FROM {stg_credits} WHERE loan_account_number = ''"
+    return f"SELECT count() FROM {stg_credits} WHERE trim(loan_account_number) = '' OR loan_account_number = 'None'"
+    
 
 
 def orphan_payments_sql(stg_payments: str, stg_credits: str) -> str:

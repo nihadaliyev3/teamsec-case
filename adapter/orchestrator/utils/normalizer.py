@@ -208,7 +208,8 @@ class DataNormalizer:
         cleaned = {}
         try:
             # ===== Identity (required for partitioning and ordering) =====
-            cleaned['loan_account_number'] = str(row.get('loan_account_number', ''))
+            val = row.get('loan_account_number')
+            cleaned['loan_account_number'] = '' if val in (None, '') else str(val)
             cleaned['customer_id'] = str(row.get('customer_id', ''))
             cleaned['tenant_id'] = row.get('tenant_id')  # Injected by ETL
             cleaned['loan_type'] = row.get('loan_type')  # Injected by ETL
