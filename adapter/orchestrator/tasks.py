@@ -16,6 +16,16 @@ from orchestrator.constants import (
     PAYMENTS_FIELD_SCHEMA,
 )
 from orchestrator.models import SyncJob, Tenant, SyncReport
+from orchestrator.sql import (
+    ghost_loans_sql,
+    orphan_payments_sql,
+    negative_balances_sql,
+    count_rows_sql,
+    build_profiling_sql,
+    copy_partition_sql,
+    select_count_sql,
+    drop_table_sql,
+)
 from orchestrator.utils.normalizer import DataNormalizer
 from utils.ch_client import ch_client
 
@@ -112,21 +122,18 @@ def run_validation_suite(stg_credits, stg_payments):
     quality_warnings = []
 
     # 1. CRITICAL: Missing ID (Must Kill)
-    ghost_count = client.command(f"SELECT count() FROM {stg_credits} WHERE loan_account_number = ''")
+    ghost_count = client.command(ghost_loans_sql(stg_credits))
     if ghost_count > 0:
         critical_errors.append(f"CRITICAL: {ghost_count} rows missing Loan Account Number. Sync Aborted.")
 
     # 2. QUALITY: Orphan Payments (Accept but warn)
     if stg_payments:
-        orphan_count = client.command(f"""
-            SELECT count() FROM {stg_payments} 
-            WHERE loan_account_number NOT IN (SELECT loan_account_number FROM {stg_credits})
-        """)
+        orphan_count = client.command(orphan_payments_sql(stg_payments, stg_credits))
         if orphan_count > 0:
             quality_warnings.append(f"WARNING: {orphan_count} payments are orphans (no matching loan).")
 
     # 3. QUALITY: Negative Balances (Accept but warn)
-    neg_count = client.command(f"SELECT count() FROM {stg_credits} WHERE outstanding_principal_balance < 0")
+    neg_count = client.command(negative_balances_sql(stg_credits))
     if neg_count > 0:
         quality_warnings.append(f"WARNING: {neg_count} loans have negative balances.")
 
@@ -154,7 +161,7 @@ def calculate_profiling_stats(stg_table: str, table_type: str) -> dict:
     
     # Get total row count once
     try:
-        total_rows = client.query(f"SELECT count() FROM {stg_table}").result_rows[0][0]
+        total_rows = client.query(count_rows_sql(stg_table)).result_rows[0][0]
         if total_rows == 0:
             logger.warning(f"Profiling: {stg_table} is empty")
             return {'_meta': {'total_rows': 0, 'table': stg_table}}
@@ -179,22 +186,18 @@ def calculate_profiling_stats(stg_table: str, table_type: str) -> dict:
     return stats
 
 
-def _profile_field(client, table: str, field: str, field_type, total_rows: int) -> dict:
+def _profile_field(client, table: str, field: str, field_type, total_rows: int) -> dict | None:
     """
     Profile a single field based on its type.
     Returns dict with appropriate statistics.
     """
+    sql = build_profiling_sql(table, field, field_type)
+    if not sql:
+        return None
+
+    row = client.query(sql).result_rows[0]
+
     if field_type == FieldType.NUMERIC:
-        sql = f"""
-        SELECT 
-            min({field}),
-            max({field}),
-            avg({field}),
-            stddevPop({field}),
-            countIf({field} IS NULL)
-        FROM {table}
-        """
-        row = client.query(sql).result_rows[0]
         return {
             'min': _safe_float(row[0]),
             'max': _safe_float(row[1]),
@@ -203,23 +206,12 @@ def _profile_field(client, table: str, field: str, field_type, total_rows: int) 
             'null_ratio': round(row[4] / total_rows, 4) if total_rows > 0 else 0,
             'null_count': row[4],
         }
-    
-    elif field_type == FieldType.CATEGORICAL:
-        # Unique count and most frequent value
-        sql = f"""
-        SELECT 
-            uniqExact({field}),
-            countIf({field} IS NULL),
-            topK(1)({field})[1] AS most_freq,
-            countIf({field} = topK(1)({field})[1])
-        FROM {table}
-        """
-        row = client.query(sql).result_rows[0]
+
+    if field_type == FieldType.CATEGORICAL:
         unique_count = row[0]
         null_count = row[1]
         most_frequent = row[2] if row[2] else None
         most_frequent_count = row[3] if row[3] else 0
-        
         return {
             'unique_count': unique_count,
             'most_frequent': most_frequent,
@@ -227,37 +219,22 @@ def _profile_field(client, table: str, field: str, field_type, total_rows: int) 
             'null_ratio': round(null_count / total_rows, 4) if total_rows > 0 else 0,
             'null_count': null_count,
         }
-    
-    elif field_type == FieldType.DATE:
-        sql = f"""
-        SELECT 
-            min({field}),
-            max({field}),
-            countIf({field} IS NULL)
-        FROM {table}
-        """
-        row = client.query(sql).result_rows[0]
+
+    if field_type == FieldType.DATE:
         return {
             'min': str(row[0]) if row[0] else None,
             'max': str(row[1]) if row[1] else None,
             'null_ratio': round(row[2] / total_rows, 4) if total_rows > 0 else 0,
             'null_count': row[2],
         }
-    
-    elif field_type == FieldType.STRING:
-        sql = f"""
-        SELECT 
-            uniqExact({field}),
-            countIf({field} IS NULL OR {field} = '')
-        FROM {table}
-        """
-        row = client.query(sql).result_rows[0]
+
+    if field_type == FieldType.STRING:
         return {
             'unique_count': row[0],
             'null_or_empty_ratio': round(row[1] / total_rows, 4) if total_rows > 0 else 0,
             'null_or_empty_count': row[1],
         }
-    
+
     return None
 
 
@@ -387,27 +364,19 @@ def process_sync(job_id):
         if needs_credit_dl:
             rows_credits = stream_to_staging(tenant, f"{prefix}_credit", stg_credits, 'credits', category)
         else:
-            # OPTIMIZATION: Instead of downloading 200MB, just copy the partition locally in CH
-            # This takes milliseconds regardless of file size
-            sql = f"""
-            INSERT INTO {stg_credits} 
-            SELECT * FROM credits_all 
-            WHERE tenant_id = '{tenant.tenant_id}' AND loan_type = '{category}'
-            """
-            ch_client.connect().command(sql)
-            rows_credits = ch_client.connect().command(f"SELECT count() FROM {stg_credits}")
+            # OPTIMIZATION: Copy partition locally in CH instead of re-downloading
+            client = ch_client.connect()
+            client.command(copy_partition_sql(stg_credits, 'credits_all', tenant.tenant_id, category))
+            rows_credits = client.command(select_count_sql(stg_credits))
             logger.info(f"Re-used local partition for {category} Credits (Version {job.remote_version_credit})")
 
         if needs_payment_dl:
             rows_payments = stream_to_staging(tenant, f"{prefix}_payment", stg_payments, 'payments', category)
         else:
-            sql = f"""
-            INSERT INTO {stg_payments} 
-            SELECT * FROM payments_all 
-            WHERE tenant_id = '{tenant.tenant_id}' AND loan_type = '{category}'
-            """
-            ch_client.connect().command(sql)
-            rows_payments = ch_client.connect().command(f"SELECT count() FROM {stg_payments}")
+            # OPTIMIZATION: Copy partition locally in CH instead of re-downloading
+            client = ch_client.connect()
+            client.command(copy_partition_sql(stg_payments, 'payments_all', tenant.tenant_id, category))
+            rows_payments = client.command(select_count_sql(stg_payments))
             logger.info(f"Re-used local partition for {category} Payments (Version {job.remote_version_payment})")
         
         # D. VALIDATION
@@ -465,7 +434,9 @@ def process_sync(job_id):
         # Cleanup: Drop Staging Tables (Success or Fail)
         try:
             client = ch_client.connect()
-            if stg_credits: client.command(f"DROP TABLE IF EXISTS {stg_credits}")
-            if stg_payments: client.command(f"DROP TABLE IF EXISTS {stg_payments}")
+            if stg_credits:
+                client.command(drop_table_sql(stg_credits))
+            if stg_payments:
+                client.command(drop_table_sql(stg_payments))
         except Exception as e:
             logger.error(f"Cleanup failed: {e}")
