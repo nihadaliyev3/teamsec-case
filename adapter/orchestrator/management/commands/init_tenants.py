@@ -19,9 +19,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         tenants_config = [
-            {"name": "Bank 1 (Standard)", "slug": "bank001", "api_url": "http://external-bank:8000/api/data"},
-            {"name": "Bank 2 (High Volume)", "slug": "bank002", "api_url": "http://external-bank:8000/api/data"},
-            {"name": "Bank 3 (Foreign)", "slug": "bank003", "api_url": "http://external-bank:8000/api/data"},
+            {"name": "Bank 1 (Standard)", "slug": "bank001", "api_url": "http://external-bank:8000/api/data/"},
+            {"name": "Bank 2 (High Volume)", "slug": "bank002", "api_url": "http://external-bank:8000/api/data/"},
+            {"name": "Bank 3 (Foreign)", "slug": "bank003", "api_url": "http://external-bank:8000/api/data/"},
         ]
 
         regenerate = options.get("regenerate_keys", False)

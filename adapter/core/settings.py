@@ -18,7 +18,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --- SECURITY ---
 SECRET_KEY = os.environ.get('SECRET_KEY_ADAPTER', 'unsafe-local-dev-key')
 DEBUG = os.environ.get('DEBUG') == 'True'
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+_allowed = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
+# Include 'adapter' for API -> adapter proxy calls (Docker service name)
+if 'adapter' not in _allowed:
+    _allowed.append('adapter')
+ALLOWED_HOSTS = [h.strip() for h in _allowed]
 
 
 # Application definition

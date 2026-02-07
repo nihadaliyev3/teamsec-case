@@ -14,7 +14,6 @@ class SyncTriggerView(APIView):
     Tenant is derived from the API key; body only contains loan_category and optional force.
     """
     permission_classes = [IsTenantAuthenticated]
-    authentication_classes = []  # Set globally via REST_FRAMEWORK
 
     def post(self, request):
         tenant = request.auth  # Set by TenantAPIKeyAuthentication

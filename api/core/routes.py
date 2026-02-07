@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .config import settings
 from .infrastructure import ClickHouse, get_pg_session
 from .security import get_current_tenant
-from ..schemas import LoanData, ProfilingData, TaskResponse
+from schemas import LoanData, ProfilingData, TaskResponse
 
 router = APIRouter()
 
