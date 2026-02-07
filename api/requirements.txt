@@ -1,5 +1,9 @@
-fastapi
-uvicorn[standard]
-clickhouse-connect
-pydantic-settings
-python-jose
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+httpx==0.27.0
+clickhouse-connect==0.7.0
+python-dotenv==1.0.0
+redis==5.0.1           # To push tasks to Celery
+celery==5.3.6          # To format the tasks correctly
+asyncpg==0.29.0        # Async Postgres driver
+sqlalchemy==2.0.25     # SQL Toolkit

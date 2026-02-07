@@ -72,7 +72,9 @@ def get_remote_version(tenant, file_type):
     """
     try:
         url = f"{tenant.api_url}"
-        headers = {'Authorization': f'Bearer {tenant.api_token}'}
+        headers = {}
+        if tenant.api_token:
+            headers['Authorization'] = f'Bearer {tenant.api_token}'
         params = {'file_type': file_type, 'tenant': tenant.tenant_id}
         
         response = requests.head(url, params=params, headers=headers, timeout=5)
@@ -131,10 +133,9 @@ def stream_to_staging(tenant, file_type, staging_table, table_type, loan_categor
         url += '/'
         
     params = {'file_type': file_type, 'tenant': tenant.tenant_id}
-    headers = {
-        'Authorization': f'Bearer {tenant.api_token}',
-        'Accept-Encoding': 'gzip' # We explicitly ask for Gzip
-    }
+    headers = {'Accept-Encoding': 'gzip'}
+    if tenant.api_token:
+        headers['Authorization'] = f'Bearer {tenant.api_token}'
     
     logger.info(f"Connecting to {url} for {file_type}...")
     response = requests.get(url, params=params, headers=headers, stream=True)

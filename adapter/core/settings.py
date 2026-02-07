@@ -133,3 +133,13 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 CLICKHOUSE_INSERT_BATCH_SIZE = 10000
+
+# --- REST FRAMEWORK (API Key auth for sync endpoints) ---
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'orchestrator.authentication.TenantAPIKeyAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',  # Views opt-in via IsTenantAuthenticated
+    ],
+}

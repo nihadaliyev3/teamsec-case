@@ -122,16 +122,18 @@ services:
   # 4. API (Analytics Gateway) - New Service
   # ----------------------------------------------------------------
   api:
-    build: 
-      context: ./api            # <--- NEW: Dedicated build context
+    build:
+      context: ./api
     container_name: teamsec_api
     command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
     volumes:
       - ./api:/app
     ports:
-      - "8002:8002"             # Host 8002 -> Container 8002
+      - "8002:8002"
     depends_on:
+      - db_ops
       - db_dwh
+      - adapter
     env_file:
       - .env
     networks:
