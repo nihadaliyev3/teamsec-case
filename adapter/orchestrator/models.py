@@ -48,7 +48,7 @@ class SyncJob(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.tenant.slug} - {self.run_date} ({self.status})"
+        return f"{self.tenant.slug} - {self.started_at} ({self.status})"
 
 
 class SyncReport(models.Model):

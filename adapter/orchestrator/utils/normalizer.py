@@ -6,12 +6,14 @@ expected by ClickHouse (ISO dates, Decimals, canonical enum codes).
 Raises NormalizationError on invalid data so the ETL can skip or log bad rows.
 """
 
+
 import logging
 import re
 from decimal import Decimal, InvalidOperation
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any, Optional, Type, Dict
 from enum import Enum
+
 
 from orchestrator.constants import (
     CustomerType, LoanStatusCode, LoanStatusFlag, 
@@ -77,24 +79,47 @@ class DataNormalizer:
         
         return value_str
 
-    @staticmethod
-    def to_date(value: Any) -> Optional[str]:
+    @classmethod
+    def to_date(cls, value: Any) -> Optional[date]:
         """
-        Normalize date to ISO YYYY-MM-DD for ClickHouse Date columns.
-        Tries DATE_FORMATS in order; raises NormalizationError if none match.
+        Parses a date string into a Python date object.
+        Supports: ISO, Compact (YYYYMMDD), TR (DD.MM.YYYY), Slash.
+        Handles: Floats (20250619.0), Strings ("20250619.0"), and NaNs.
         """
-        if not value:
+        if value is None:
             return None
-        value_str = str(value).strip()
-        if not value_str:  # Whitespace-only after strip
+
+        # 1. Handle native Date objects immediately
+        if isinstance(value, (date, datetime)):
+            return value if isinstance(value, date) else value.date()
+
+        # 2. Convert to string and strip whitespace
+        #    This unifies Float (20250619.0) and String ("20250619.0") handling
+        s_val = str(value).strip()
+
+        # 3. Handle Empty / NaN / Null
+        if not s_val or s_val.lower() in ['nan', 'none', 'null', 'nat']:
             return None
-        for fmt in DataNormalizer.DATE_FORMATS:
+
+        # 4. CRITICAL: Handle ".0" suffix for BOTH Floats and Strings
+        #    e.g. float 20250619.0 -> "20250619.0" -> "20250619"
+        #    e.g. string "20250619.0" -> "20250619.0" -> "20250619"
+        if s_val.endswith('.0'):
+            s_val = s_val[:-2]
+        
+        # 5. Handle Timestamp Strings (e.g. "2025-06-19 00:00:00")
+        s_val = s_val.split(' ')[0]
+
+        # 6. Parse using the class-level formats list
+        for fmt in cls.DATE_FORMATS:
             try:
-                dt = datetime.strptime(value_str, fmt)
-                return dt.date().isoformat()
+                return datetime.strptime(s_val, fmt).date()
             except ValueError:
                 continue
-        raise NormalizationError(f"Invalid date format: {value}")
+
+        # Log failure with the exact string we tried to parse
+        logger.warning(f"Failed to parse date: Original='{value}' -> Cleaned='{s_val}'")
+        return None
 
     @staticmethod
     def to_decimal(value: Any, precision: int = 4) -> Optional[Decimal]:
@@ -164,6 +189,7 @@ class DataNormalizer:
             return normalizer_func(value, *args, **kwargs)
         except (NormalizationError, ValueError, TypeError, InvalidOperation):
             return None
+        
 
     @classmethod
     def normalize_credit_row(cls, row: dict, strict: bool = False) -> dict:

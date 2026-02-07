@@ -195,7 +195,7 @@ class DataDownloadView(APIView):
             chunk_df = self._apply_tenant_transformation(chunk_df, tenant_id)
             
             # Replace NaN with None for proper JSON null serialization
-            chunk_df = chunk_df.where(pd.notnull(chunk_df), None)
+            chunk_df = chunk_df.astype(object).where(pd.notnull(chunk_df), None)
             
             # Convert chunk to list of dicts
             records = chunk_df.to_dict(orient='records')

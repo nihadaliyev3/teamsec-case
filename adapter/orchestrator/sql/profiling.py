@@ -26,11 +26,13 @@ def profile_numeric_sql(table: str, field: str) -> str:
 def profile_categorical_sql(table: str, field: str) -> str:
     """Unique count, null count, most frequent value and its count."""
     return f"""
+    WITH 
+        (SELECT topK(1)({field})[1] FROM {table}) AS top_val
     SELECT
         uniqExact({field}),
         countIf({field} IS NULL),
-        topK(1)({field})[1] AS most_freq,
-        countIf({field} = topK(1)({field})[1])
+        top_val,
+        countIf({field} = top_val)
     FROM {table}
     """
 

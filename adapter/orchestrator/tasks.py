@@ -2,10 +2,11 @@ import json
 import logging
 import requests
 import ijson
+import io
+import gzip
 from celery import shared_task
 from django.utils import timezone
 from django.conf import settings
-
 from orchestrator.constants import (
     LoanCategory,
     SyncJobStatus,
@@ -42,6 +43,29 @@ class ValidationException(Exception):
 # 1. HELPER FUNCTIONS (Network & ClickHouse)
 # ============================================================================
 
+# Helper Class to "Peek" at the stream without consuming it permanently
+class MagicNumberStream(io.RawIOBase):
+    def __init__(self, stream, peeked_bytes):
+        self.stream = stream
+        self.leftover = peeked_bytes
+    
+    def readinto(self, b):
+        # Read from leftover bytes first
+        if self.leftover:
+            n = len(self.leftover)
+            if len(b) < n:
+                b[:len(b)] = self.leftover[:len(b)]
+                self.leftover = self.leftover[len(b):]
+                return len(b)
+            else:
+                b[:n] = self.leftover
+                self.leftover = b''
+                return n + self.stream.readinto(b[n:])
+        return self.stream.readinto(b)
+    
+    def readable(self):
+        return True
+
 def get_remote_version(tenant, file_type):
     """
     Performs a lightweight HEAD request to check file version.
@@ -62,20 +86,85 @@ def get_remote_version(tenant, file_type):
         logger.warning(f"Version check failed for {tenant.tenant_id} {file_type}: {e}")
         return None
 
+logger = logging.getLogger(__name__)
+
+class PeekableStream(object):
+    """
+    A file-like object that allows 'peeking' at the start of a stream
+    and then continuing to read from it seamlessly.
+    """
+    def __init__(self, stream, peeked_data):
+        self.stream = stream
+        self.buffer = peeked_data
+
+    def read(self, size=-1):
+        # 1. If buffer is empty, read directly from stream
+        if not self.buffer:
+            return self.stream.read(size)
+        
+        # 2. If size is -1 (read all), combine buffer + rest of stream
+        if size == -1: 
+            chunk = self.buffer + self.stream.read()
+            self.buffer = b""
+            return chunk
+            
+        # 3. If request is smaller than buffer, slice the buffer
+        if size <= len(self.buffer):
+            chunk = self.buffer[:size]
+            self.buffer = self.buffer[size:]
+            return chunk
+            
+        # 4. If request is larger than buffer, drain buffer + read remainder
+        chunk = self.buffer
+        needed = size - len(chunk)
+        self.buffer = b""
+        return chunk + self.stream.read(needed)
+
+    def close(self):
+        if hasattr(self.stream, 'close'):
+            self.stream.close()
+
 def stream_to_staging(tenant, file_type, staging_table, table_type, loan_category):
-    """
-    Streams JSON from Simulator -> Normalizes -> Batch Inserts to ClickHouse Staging.
-    """
+    # Ensure URL has trailing slash to avoid 301 Redirects
     url = f"{tenant.api_url}"
+    if not url.endswith('/'):
+        url += '/'
+        
     params = {'file_type': file_type, 'tenant': tenant.tenant_id}
-    headers = {'Authorization': f'Bearer {tenant.api_token}'}
+    headers = {
+        'Authorization': f'Bearer {tenant.api_token}',
+        'Accept-Encoding': 'gzip' # We explicitly ask for Gzip
+    }
     
-    # stream=True prevents loading 200MB into RAM
+    logger.info(f"Connecting to {url} for {file_type}...")
     response = requests.get(url, params=params, headers=headers, stream=True)
+    
     if response.status_code != 200:
         raise Exception(f"API Error {response.status_code}: {response.text}")
+    
+    raw_stream = response.raw
+    # Ensure urllib3 doesn't try to decompress automatically (we do it manually)
+    raw_stream.decode_content = False 
 
-    # Configuration based on table type
+    # 1. PEEK: Read the first 2 bytes to check for Gzip Magic Number
+    peek_bytes = raw_stream.read(2)
+    
+    # DEBUG LOG: Tell us exactly what we received
+    logger.info(f"FIRST 2 BYTES HEX: {peek_bytes.hex()}")
+
+    # 2. DETECT: Check for \x1f\x8b (Gzip Magic Number)
+    is_gzipped = (peek_bytes == b'\x1f\x8b')
+    
+    logger.info(f"Gzip Detected via Magic Number? {is_gzipped}")
+
+    # 3. RESTORE: Stitch the bytes back using our helper
+    source_stream = PeekableStream(raw_stream, peek_bytes)
+
+    # 4. WRAP: If Gzip, wrap it
+    if is_gzipped:
+        source_stream = gzip.GzipFile(fileobj=source_stream, mode='rb')
+
+    # Configuration
     if table_type == 'credits':
         columns = CREDIT_COLUMNS
         normalize_func = DataNormalizer.normalize_credit_row
@@ -86,31 +175,31 @@ def stream_to_staging(tenant, file_type, staging_table, table_type, loan_categor
     batch = []
     total_rows = 0
     
-    # ijson parses the stream byte-by-byte
-    for record in ijson.items(response.raw, 'item'):
-        # Inject Context
-        record['tenant_id'] = tenant.tenant_id
-        record['loan_type'] = loan_category # e.g. COMMERCIAL
-        
-        # Normalize (strict=False to allow loading dirty data for validation)
-        cleaned_row = normalize_func(record, strict=False)
-        
-        # Prepare row for ClickHouse
-        row_values = [cleaned_row.get(col) for col in columns]
-        batch.append(row_values)
-        
-        if len(batch) >= BATCH_SIZE:
+    try:
+        # ijson reads from our (possibly decompressed) stream
+        for record in ijson.items(source_stream, 'item'):
+            record['tenant_id'] = tenant.tenant_id
+            record['loan_type'] = loan_category
+            
+            cleaned_row = normalize_func(record, strict=False)
+            row_values = [cleaned_row.get(col) for col in columns]
+            batch.append(row_values)
+            
+            if len(batch) >= BATCH_SIZE:
+                ch_client.insert_batch(staging_table, batch, columns)
+                total_rows += len(batch)
+                batch = []
+
+        if batch:
             ch_client.insert_batch(staging_table, batch, columns)
             total_rows += len(batch)
-            batch = []
-
-    if batch:
-        ch_client.insert_batch(staging_table, batch, columns)
-        total_rows += len(batch)
+            
+    finally:
+        if hasattr(source_stream, 'close'):
+            source_stream.close()
         
     logger.info(f"Loaded {total_rows} rows into {staging_table}")
     return total_rows
-
 
 def run_validation_suite(stg_credits, stg_payments):
     """
