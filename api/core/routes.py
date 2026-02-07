@@ -108,18 +108,17 @@ async def get_profiling_stats(
     db: AsyncSession = Depends(get_pg_session),
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """
-    Fetches profiling reports filtered by tenant and loan_type (matches SyncJob.loan_category).
-    """
     from sqlalchemy import text
 
+    # ... query stays the same ...
     query = text("""
         SELECT
-            j.tenant_id, j.completed_at, j.status,
+            t.tenant_id, j.completed_at, j.status,
             r.total_rows_processed, r.validation_errors, r.profiling_stats
         FROM orchestrator_syncreport r
         JOIN orchestrator_syncjob j ON r.job_id = j.id
-        WHERE j.tenant_id = :tenant AND j.loan_category = :loan_category
+        JOIN orchestrator_tenant t ON j.tenant_id = t.id
+        WHERE t.tenant_id = :tenant AND j.loan_category = :loan_category AND j.status = 'SUCCESS'
         ORDER BY j.completed_at DESC
         LIMIT 5
     """)
@@ -127,14 +126,24 @@ async def get_profiling_stats(
         query, {"tenant": tenant_id, "loan_category": loan_type}
     )
     rows = result.fetchall()
+    
     reports = []
     for row in rows:
+        raw_errors = row[4]
+        final_errors = {}
+        
+        if isinstance(raw_errors, list):
+            # Wrap the list in a dict to satisfy the contract
+            final_errors = {"general_errors": raw_errors}
+        elif isinstance(raw_errors, dict):
+            final_errors = raw_errors
+        
         reports.append({
             "tenant_id": row[0],
             "sync_date": row[1],
             "status": row[2],
             "total_rows": row[3],
-            "validation_errors": row[4] or {},
+            "validation_errors": final_errors, 
             "profiling_stats": row[5] or {},
         })
     return reports
