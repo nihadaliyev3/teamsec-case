@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+clickhouse-connect
+pydantic-settings
+python-jose

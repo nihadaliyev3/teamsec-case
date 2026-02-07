@@ -1,0 +1,7 @@
+Django>=5.0
+djangorestframework
+pandas
+numpy
+faker
+gunicorn
+python-dotenv

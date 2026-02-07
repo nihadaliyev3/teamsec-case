@@ -2,26 +2,26 @@ from django.core.management.base import BaseCommand
 from orchestrator.models import Tenant
 
 class Command(BaseCommand):
-    help = 'Initialize default tenants for the simulator'
+    help = 'Initialize default tenants for the external bank'
 
     def handle(self, *args, **kwargs):
         tenants = [
             {
                 "name": "Bank 1 (Standard)",
                 "slug": "bank001",
-                "api_url": "http://simulator:8000/api/data",
+                "api_url": "http://external-bank:8000/api/data",
                 "is_active": True
             },
             {
                 "name": "Bank 2 (High Volume)",
                 "slug": "bank002",
-                "api_url": "http://simulator:8000/api/data",
+                "api_url": "http://external-bank:8000/api/data",
                 "is_active": True
             },
             {
                 "name": "Bank 3 (Foreign)",
                 "slug": "bank003",
-                "api_url": "http://simulator:8000/api/data",
+                "api_url": "http://external-bank:8000/api/data",
                 "is_active": True
             },
         ]

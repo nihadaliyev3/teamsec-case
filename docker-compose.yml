@@ -1,10 +1,13 @@
+
 services:
-  # 1. Operational DB
+  # ----------------------------------------------------------------
+  # 1. INFRASTRUCTURE (Databases & Broker)
+  # ----------------------------------------------------------------
+  
+  # Operational DB (Postgres) - Keeps your specific Env mapping
   db_ops:
     image: postgres:15-alpine
     container_name: teamsec_ops
-    # Docker automatically pulls variables from .env if they match standard Postgres names
-    # Or we can map them explicitly:
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
@@ -13,14 +16,16 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - teamsec_net
 
-  # 2. Data Warehouse (ClickHouse) - Large Data, Partitions
+  # Data Warehouse (ClickHouse) - Keeps your ulimits and volumes
   db_dwh:
     image: clickhouse/clickhouse-server:23-alpine
     container_name: teamsec_dwh
     ports:
-      - "8123:8123" # HTTP Port
-      - "9000:9000" # Native Client Port
+      - "8123:8123" # HTTP
+      - "9000:9000" # Native
     ulimits:
       nofile:
         soft: 262144
@@ -28,72 +33,114 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse_logs:/var/log/clickhouse-server
+    networks:
+      - teamsec_net
 
-  # 3. Task Queue Broker
   redis:
     image: redis:alpine
     container_name: teamsec_redis
     ports:
       - "6379:6379"
+    networks:
+      - teamsec_net
 
-  # 4. The Adapter
-  adapter:
-    build: .
-    container_name: teamsec_adapter
+  # ----------------------------------------------------------------
+  # 2. EXTERNAL BANK (Source System) - Formerly 'simulator'
+  # ----------------------------------------------------------------
+  external-bank:
+    build: 
+      context: ./external_bank  # <--- NEW: Dedicated build context
+    container_name: teamsec_bank
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
-      - ./adapter:/app/adapter
-      - ./requirements.txt:/app/requirements.txt
+      - ./external_bank:/app    # <--- NEW: Maps directly to /app
     ports:
-      - "8000:8000"
+      - "8001:8000"             # Host 8001 -> Container 8000 (Matches your pref)
+    env_file:
+      - .env                    # <--- KEEPS: Your env config
+    networks:
+      - teamsec_net
+
+  # ----------------------------------------------------------------
+  # 3. ADAPTER (The ETL Engine)
+  # ----------------------------------------------------------------
+  adapter:
+    build: 
+      context: ./adapter        # <--- NEW: Dedicated build context
+    container_name: teamsec_adapter
+    # Wait for Postgres & Clickhouse to be ready
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./adapter:/app          # <--- NEW: Maps directly to /app
+    ports:
+      - "8000:8000"             # Host 8000 -> Container 8000
     depends_on:
       - db_ops
       - db_dwh
       - redis
-    working_dir: /app/adapter
+      - external-bank
     env_file:
-      - .env
+      - .env                    # <--- KEEPS: Your env config
+    networks:
+      - teamsec_net
 
-  # 5. Celery Worker
+  # Celery Worker (Reuses Adapter Image)
   celery_worker:
-    build: .
+    build: 
+      context: ./adapter
     container_name: teamsec_worker
     command: celery -A core worker -l info
     volumes:
-      - ./adapter:/app/adapter
+      - ./adapter:/app
     depends_on:
-      - redis
       - adapter
-    working_dir: /app/adapter
+      - redis
     env_file:
       - .env
+    networks:
+      - teamsec_net
 
-  # 6. Celery Beat
+  # Celery Beat (Reuses Adapter Image)
   celery_beat:
-    build: .             # <--- Change this from ./adapter to .
+    build: 
+      context: ./adapter
     container_name: teamsec_beat
     command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
-    working_dir: /app/adapter # <--- Ensure this is set so it finds 'core'
+    volumes:
+      - ./adapter:/app
     depends_on:
-      - db_ops
+      - adapter
       - redis
-    env_file: .env
-    volumes:
-      - ./adapter:/app/adapter
-
-  # 7. Simulator
-  simulator:
-    build: .
-    container_name: teamsec_simulator
-    command: python manage.py runserver 0.0.0.0:8000
-    working_dir: /app/external_bank
-    volumes:
-      - ./external_bank:/app/external_bank
-    ports:
-      - "8001:8000"
     env_file:
       - .env
+    networks:
+      - teamsec_net
+
+  # ----------------------------------------------------------------
+  # 4. API (Analytics Gateway) - New Service
+  # ----------------------------------------------------------------
+  api:
+    build: 
+      context: ./api            # <--- NEW: Dedicated build context
+    container_name: teamsec_api
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+    volumes:
+      - ./api:/app
+    ports:
+      - "8002:8002"             # Host 8002 -> Container 8002
+    depends_on:
+      - db_dwh
+    env_file:
+      - .env
+    networks:
+      - teamsec_net
 
 volumes:
   postgres_data:
   clickhouse_data:
+
+networks:
+  teamsec_net:
+    driver: bridge

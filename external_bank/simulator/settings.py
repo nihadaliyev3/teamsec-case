@@ -22,7 +22,12 @@ SECRET_KEY = os.environ.get('SECRET_KEY_SIMULATOR', 'unsafe-sim-key')
 DEBUG = os.environ.get('DEBUG') == 'True'
 
 # Allow all hosts because this runs inside Docker internal network
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    'external-bank',  # RFC-compliant service name (Adapter calls via Docker DNS)
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+]
 
 # --- DATABASE (SQLite) ---
 # Simple file-based DB. No need for Postgres here.

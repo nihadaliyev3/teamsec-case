@@ -1,0 +1,14 @@
+Django>=5.0
+djangorestframework
+celery
+redis
+django-celery-beat
+pandas
+numpy
+psycopg2-binary
+clickhouse-connect
+ijson
+requests
+gunicorn
+python-dotenv
+python-dateutil
