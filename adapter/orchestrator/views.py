@@ -1,8 +1,9 @@
 from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, permissions
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from .constants import LoanCategory
 
 from .serializers import SyncTriggerSerializer
 from .tasks import trigger_sync_logic
@@ -19,9 +20,13 @@ class SyncTriggerView(APIView):
 
         tenant = serializer.validated_data['tenant_id']
         category = serializer.validated_data['loan_category']
+
+        # Convert string back to Enum if needed, or pass string if tasks handles it
+        # tasks.py trigger_sync_logic expects LoanCategory enum member
+        category_enum = LoanCategory(category)
         
         # Reuse the logic with force=True
-        job_id = trigger_sync_logic(tenant, category, force=True)
+        job_id = trigger_sync_logic(tenant, category_enum, force=True)
 
         if job_id:
             return Response({

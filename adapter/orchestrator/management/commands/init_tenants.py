@@ -9,19 +9,19 @@ class Command(BaseCommand):
             {
                 "name": "Bank 1 (Standard)",
                 "slug": "bank001",
-                "api_url": "http://simulator:8000",
+                "api_url": "http://simulator:8000/api/data",
                 "is_active": True
             },
             {
                 "name": "Bank 2 (High Volume)",
                 "slug": "bank002",
-                "api_url": "http://simulator:8000",
+                "api_url": "http://simulator:8000/api/data",
                 "is_active": True
             },
             {
                 "name": "Bank 3 (Foreign)",
                 "slug": "bank003",
-                "api_url": "http://simulator:8000",
+                "api_url": "http://simulator:8000/api/data",
                 "is_active": True
             },
         ]
