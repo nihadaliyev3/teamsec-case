@@ -49,17 +49,20 @@ INSTALLED_APPS = [
     'rest_framework', 
     'data_api', # Needed for the External Bank API
     # 'simulator_app', # You will create this app later
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 
 ROOT_URLCONF = 'simulator.urls'
 
@@ -91,3 +94,6 @@ STATIC_URL = 'static/'
 # Media files (Uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+
+CORS_ALLOW_ALL_ORIGINS = True

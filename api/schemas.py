@@ -23,7 +23,19 @@ class ProfilingData(BaseModel):
 
 class LoanData(BaseModel):
     loan_account_number: str
-    original_loan_amount: Optional[float]
-    outstanding_principal_balance: Optional[float]
-    loan_status_code: Optional[str]
-    days_past_due: Optional[int]
+    customer_id: Optional[str] = None
+    customer_type: Optional[str] = None
+    loan_product_type: Optional[str] = None
+    loan_status_code: Optional[str] = None
+    loan_status_flag: Optional[str] = None
+    days_past_due: Optional[int] = None
+    original_loan_amount: Optional[float] = None
+    outstanding_principal_balance: Optional[float] = None
+    nominal_interest_rate: Optional[float] = None
+    total_installment_count: Optional[int] = None
+    outstanding_installment_count: Optional[int] = None
+    loan_start_date: Optional[str] = None
+    final_maturity_date: Optional[str] = None
+    internal_rating: Optional[str] = None
+    sector_code: Optional[str] = None
+    customer_segment: Optional[str] = None

@@ -139,9 +139,45 @@ services:
     networks:
       - teamsec_net
 
+  # ----------------------------------------------------------------
+  # 5. FRONTEND - BANK SIMULATOR (Source System UI)
+  # ----------------------------------------------------------------
+  external_bank_ui:
+    build:
+      context: ./frontend/external_bank_ui/bank-ui
+    container_name: teamsec_bank_ui
+    volumes:
+      - ./frontend/external_bank_ui/bank-ui:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8001/api # Talks to Bank Django
+    networks:
+      - teamsec_net
+
+  # ----------------------------------------------------------------
+  # 6. FRONTEND - MAIN APP (Fintech Dashboard)
+  # ----------------------------------------------------------------
+  adapter_ui:
+    build:
+      context: ./frontend/adapter_app_ui
+    container_name: teamsec_dashboard
+    volumes:
+      - ./frontend/adapter_app_ui:/app
+      - adapter_ui_node_modules:/app/node_modules
+    ports:
+      - "5174:5173" # ⚠️ Map Host 5174 -> Container 5173 (Vite default)
+    environment:
+      - VITE_API_URL=http://localhost:8002/api # Talks to Gateway FastAPI
+    networks:
+      - teamsec_net
+      
+
 volumes:
   postgres_data:
   clickhouse_data:
+  adapter_ui_node_modules:
 
 networks:
   teamsec_net:

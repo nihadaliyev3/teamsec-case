@@ -65,39 +65,85 @@ async def trigger_sync(
 
 
 
+@router.get("/data/count")
+def get_loan_count(
+    loan_type: LoanCategoryParam,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Returns total row count for pagination."""
+    client = ClickHouse.get()
+    result = client.query(
+        "SELECT count() FROM credits_all WHERE tenant_id = %(tenant)s AND loan_type = %(loan_type)s",
+        parameters={"tenant": tenant_id, "loan_type": loan_type},
+    )
+    return {"count": result.result_rows[0][0]}
+
+
 @router.get("/data", response_model=List[LoanData])
 def get_loan_data(
     loan_type: LoanCategoryParam,
     limit: int = 100,
+    offset: int = 0,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """
-    Fetches loan data filtered by tenant and loan_type (matches credits_all.loan_type).
+    Fetches loan data filtered by tenant and loan_type. Supports pagination.
     """
+    limit = min(limit, 5000)  # Cap for performance
     client = ClickHouse.get()
     query = """
     SELECT
         loan_account_number,
+        customer_id,
+        customer_type,
+        loan_product_type,
+        loan_status_code,
+        loan_status_flag,
+        days_past_due,
         original_loan_amount,
         outstanding_principal_balance,
-        loan_status_code,
-        days_past_due
+        nominal_interest_rate,
+        total_installment_count,
+        outstanding_installment_count,
+        loan_start_date,
+        final_maturity_date,
+        internal_rating,
+        sector_code,
+        customer_segment
     FROM credits_all
     WHERE tenant_id = %(tenant)s AND loan_type = %(loan_type)s
-    LIMIT %(limit)s
+    ORDER BY loan_account_number
+    LIMIT %(limit)s OFFSET %(offset)s
     """
     result = client.query(
         query,
-        parameters={"tenant": tenant_id, "loan_type": loan_type, "limit": limit},
+        parameters={
+            "tenant": tenant_id,
+            "loan_type": loan_type,
+            "limit": limit,
+            "offset": offset,
+        },
     )
     loans = []
     for row in result.result_rows:
         loans.append({
             "loan_account_number": row[0],
-            "original_loan_amount": float(row[1]) if row[1] else None,
-            "outstanding_principal_balance": float(row[2]) if row[2] else None,
-            "loan_status_code": row[3],
-            "days_past_due": row[4],
+            "customer_id": str(row[1]) if row[1] else None,
+            "customer_type": str(row[2]) if row[2] else None,
+            "loan_product_type": str(row[3]) if row[3] else None,
+            "loan_status_code": str(row[4]) if row[4] else None,
+            "loan_status_flag": str(row[5]) if row[5] else None,
+            "days_past_due": int(row[6]) if row[6] is not None else None,
+            "original_loan_amount": float(row[7]) if row[7] else None,
+            "outstanding_principal_balance": float(row[8]) if row[8] else None,
+            "nominal_interest_rate": float(row[9]) if row[9] else None,
+            "total_installment_count": int(row[10]) if row[10] is not None else None,
+            "outstanding_installment_count": int(row[11]) if row[11] is not None else None,
+            "loan_start_date": str(row[12]) if row[12] else None,
+            "final_maturity_date": str(row[13]) if row[13] else None,
+            "internal_rating": str(row[14]) if row[14] else None,
+            "sector_code": str(row[15]) if row[15] else None,
+            "customer_segment": str(row[16]) if row[16] else None,
         })
     return loans
 
