@@ -13,9 +13,11 @@ Tüm sistem Docker ve Docker Compose ile konteynerize edilmiştir.
 
 ### 1. Projeyi Klonlayın ve Başlatın
 ```bash
-git clone <repo-url>
+git clone https://github.com/nihadaliyev3/teamsec-case.git
 cd teamsec-case
+`.env.example` dosyasini `.env`e kopyalayin.
 
+Bash
 # Tüm servisleri build edin ve ayağa kaldırın
 docker-compose up -d --build
 2. Tenant (Müşteri) Oluşturma ve API Key Üretimi
