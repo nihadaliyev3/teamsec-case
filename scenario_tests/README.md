@@ -14,7 +14,7 @@ End-to-end scenario tests for the TeamSec system. Run against live services (API
    docker compose exec adapter python manage.py migrate
    docker compose exec adapter python manage.py init_tenants
    ```
-   Save the printed API key for one tenant (e.g. BANK001).
+   Save the printed API key for 2 tenants (e.g. BANK001, BANK002).
 
 3. **Set the API key**
    ```bash

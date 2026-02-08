@@ -121,14 +121,24 @@ export default function LiveDataTable({
                                             {col.key === 'loan_status_code' ? (
                                                 <span
                                                     className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                                                        loan.loan_status_code === 'Closed'
+                                                        loan.loan_status_code === 'A'
+                                                            ? 'bg-emerald-900/30 text-emerald-400'
+                                                            : loan.loan_status_code === 'K'
                                                             ? 'bg-slate-700 text-slate-300'
-                                                            : loan.days_past_due > 0
-                                                            ? 'bg-red-900/30 text-red-400'
-                                                            : 'bg-emerald-900/30 text-emerald-400'
+                                                            : 'bg-slate-800 text-slate-400'
                                                     }`}
                                                 >
                                                     {loan.loan_status_code || '–'}
+                                                </span>
+                                            ) : col.key === 'days_past_due' ? (
+                                                <span
+                                                    className={
+                                                        loan.days_past_due > 0
+                                                            ? 'text-red-400 font-semibold'
+                                                            : ''
+                                                    }
+                                                >
+                                                    {col.render(loan)}
                                                 </span>
                                             ) : (
                                                 col.render(loan)
