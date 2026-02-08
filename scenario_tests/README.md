@@ -1,48 +1,48 @@
 # Scenario Tests (E2E)
 
-End-to-end scenario tests for the TeamSec system. Run against live services (API, Adapter, External Bank).
+TeamSec sistemi için uçtan uca (end-to-end) senaryo testleri. Bu testler; API Gateway, Adapter ve Harici Banka Simülatörü servisleri canlıyken çalıştırılmak üzere tasarlanmıştır.
 
-## Prerequisites
+## Ön Gereksinimler
 
-1. **Start all services**
+1. **Tüm servisleri başlatın:**
    ```bash
    docker compose up -d
    ```
 
-2. **Run migrations and init tenants**
+2. **Veritabanı migration'larını çalıştırın ve Tenant'ları oluşturun:**
    ```bash
    docker compose exec adapter python manage.py migrate
    docker compose exec adapter python manage.py init_tenants
    ```
-   Save the printed API key for 2 tenants (e.g. BANK001, BANK002).
+   Not: init_tenants komutu tarafından ekrana basılan 2 farklı Tenant (örn: BANK001, BANK002) için API anahtarlarını kaydedin.
 
-3. **Set the API key**
+3. **API Anahtarlarını ortam değişkeni (Environment Variable) olarak tanımlayın:**
    ```bash
    export SCENARIO_TEST_API_KEY="<paste-the-64-char-hex-key-here>"
    export SCENARIO_TEST_API_KEY_BANK002="paste-the-64-char-hex-key-here>"
    ```
 
-## Run Tests
+## Testleri Çalıştırma
 
-From the project root:
+Proje ana dizinindeyken aşağıdaki adımları izleyin:
 
 ```bash
-# 1. Install dependencies (in your venv or global)
+# 1. Bağımlılıkları yükleyin (Sanal ortam/venv veya global olarak)
 pip install -r scenario_tests/requirements.txt
 
-# 2. Run all scenario tests
+# 2. Tüm senaryo testlerini çalıştırın
 pytest scenario_tests/ -v
 
-# Or with python -m pytest (if pytest not on PATH)
+# Veya python -m pytest ile (eğer pytest PATH üzerinde tanımlı değilse)
 python -m pytest scenario_tests/ -v
 
-# 3. Run a specific file
+# 3. Sadece belirli bir dosyayı çalıştırın
 pytest scenario_tests/test_api_gateway.py -v
 
-# 4. Run a specific class
+# 4. Sadece belirli bir sınıfı (class) çalıştırın
 pytest scenario_tests/test_api_gateway.py::TestHealthCheck -v
 
-# 5. Run with API key and custom URLs
+# 5. Özel URL'ler ve API anahtarı belirterek çalıştırın
 export SCENARIO_TEST_API_KEY="your-64-char-hex-key"
 export SCENARIO_API_URL="http://localhost:8002"
 export SCENARIO_ADAPTER_URL="http://localhost:8000"
@@ -50,7 +50,7 @@ export SCENARIO_EXTERNAL_BANK_URL="http://localhost:8001"
 pytest scenario_tests/ -v
 ```
 
-## Test Coverage
+## Test Kapsamı (Coverage)
 
 | File | Focus |
 |------|--------|
@@ -61,7 +61,8 @@ pytest scenario_tests/ -v
 | `test_edge_cases.py` | Empty body, extra fields, limits, malformed auth |
 | `test_data_integrity.py` | Data integrity: tenant isolation, replace-not-append, failure keeps old data |
 
-## Skipped Tests
 
-- If `SCENARIO_TEST_API_KEY` is not set, tests that need authentication will be skipped (not fail).
-- Tenant isolation test (`test_bank001_data_has_no_b2_prefix`) requires `SCENARIO_TEST_API_KEY_BANK002`. Set it to the BANK002 key printed by `init_tenants` to run this test.
+## Atlanan (Skipped) Testler
+- Eğer SCENARIO_TEST_API_KEY tanımlanmamışsa, kimlik doğrulama gerektiren testler başarısız olmaz, otomatik olarak atlanır.
+
+- Tenant izolasyon testi (test_bank001_data_has_no_b2_prefix), SCENARIO_TEST_API_KEY_BANK002 anahtarının tanımlı olmasını gerektirir. Bu testi koşturmak için init_tenants çıktısındaki ikinci anahtarı mutlaka tanımlayın.
